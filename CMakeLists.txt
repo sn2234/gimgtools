@@ -4,7 +4,7 @@ project(gimgtools C)
 set(CMAKE_C_STANDARD 99)
 
 if(MSVC)
-    add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+    add_compile_definitions(_CRT_SECURE_NO_WARNINGS _USE_MATH_DEFINES)
 endif()
 
 # --- gimglib (static library) ---
