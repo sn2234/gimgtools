@@ -2,8 +2,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+
+#if defined(_MSC_VER) || defined(WIN32) || defined(WIN64) || defined(_WIN32) || defined(_WIN64)
+#include <windows.h>
+#include <io.h>
+#define isatty _isatty
+#define fileno _fileno
+#else
 #include <unistd.h>
 #include <sys/ioctl.h>
+#endif
+
 #include "util_indep.h"
 
 struct header_struct {
@@ -281,9 +290,15 @@ int main (int argc, char *argv[])
 
 	/* default line_columns */
 	if (isatty(1)) {
+#if defined(_MSC_VER) || defined(WIN32) || defined(WIN64) || defined(_WIN32) || defined(_WIN64)
+		CONSOLE_SCREEN_BUFFER_INFO csbi;
+		GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
+		line_columns = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+#else
 		struct winsize w;
 		ioctl(1, TIOCGWINSZ, &w);
 		line_columns = w.ws_col;
+#endif
 	} else {
 		line_columns = 80;
 	}

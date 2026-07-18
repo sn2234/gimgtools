@@ -2,7 +2,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+
+#if defined(_MSC_VER) && _MSC_VER < 1600
+#include "stdintvc.h"
+#else
 #include <stdint.h>
+#endif
+
 #include "util_indep.h"
 #include "garmin_struct.h"
 

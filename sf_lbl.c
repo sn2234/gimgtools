@@ -1,5 +1,10 @@
 #include "gimglib.h"
+
+#ifdef GT_POSIX
 #include <iconv.h>
+#else
+#include <windows.h>
+#endif
 
 // 6-bit decoder cpoied from http://libgarmin.sourceforge.net/
 static const char str6tbl1[] = {
@@ -125,6 +130,7 @@ static int lbl_decode6 (unsigned char *code, char *out, ssize_t outlen)
 static int lbl_decode8x (unsigned char *code, int codepage, char *out, ssize_t outlen)
 {
 	if (codepage >= 37 && codepage <= 16804) {
+#ifdef GT_POSIX
 		char cpstr[10];
 		iconv_t cd;
 		char *inbuf = (char *)code, *outbuf = out;
@@ -136,12 +142,29 @@ static int lbl_decode8x (unsigned char *code, int codepage, char *out, ssize_t o
 		iconv(cd, &inbuf, &inbytesleft, &outbuf, &outbytesleft); //FIXME: this converts outlen bytes regardless of null-terminator. outlen is large. performance prob.
 		outbuf[0] = '\0';
 		iconv_close(cd);
+#else
+		wchar_t wbuf[512];
+		char cpstr[10];
+		int wlen;
 
-		for (outbuf = out; *outbuf; outbuf ++) {
-			if (*outbuf == '\x1d')
-				*outbuf = '|';
-			else if (*outbuf < ' ' && *outbuf > 0)
-				*outbuf = '.';
+		sprintf(cpstr, "%d", codepage);
+		wlen = MultiByteToWideChar(CP_ACP, 0, (const char *)code, -1, wbuf, sizeof(wbuf) / sizeof(wbuf[0]));
+		if (wlen > 0) {
+			int ulen = WideCharToMultiByte(CP_UTF8, 0, wbuf, wlen, out, outlen, NULL, NULL);
+			if (ulen > 0)
+				out[ulen] = '\0';
+			else
+				out[0] = '\0';
+		} else {
+			out[0] = '\0';
+		}
+#endif
+
+		for (outlen = 0; out[outlen]; outlen ++) {
+			if (out[outlen] == '\x1d')
+				out[outlen] = '|';
+			else if (out[outlen] < ' ' && out[outlen] > 0)
+				out[outlen] = '.';
 		}
 		return strlen(out);
 	} else {
