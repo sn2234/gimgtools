@@ -77,11 +77,6 @@ static int process_gmp (FILE *fp, off_t gmp_offset)
         return 1;
     }
 
-    printf("  GMP hlen=%u type=%.10s locked=%u lbl_off=0x%x tre_off=0x%x rgn_off=0x%x sizeof(GMP)=%zu\n",
-           gmp->comm.hlen, gmp->comm.type, gmp->comm.locked,
-           gmp->lbl_offset, gmp->tre_offset, gmp->rgn_offset,
-           sizeof(struct garmin_gmp));
-    
     if (memcmp(gmp->comm.type + 7, "GMP", 3) != 0) {
         fprintf(stderr, "  Invalid GMP subfile header at 0x%llx: '%.10s'\n",
                 (unsigned long long)gmp_offset, gmp->comm.type);
@@ -201,7 +196,6 @@ static int process_img (const char *path)
         struct garmin_fat *fat = (struct garmin_fat *)malloc(sizeof(struct garmin_fat));
         off_t offset = (off_t)i * 512;
         char subfile_name[16];
-        int matched = 0;
         
         if (fat == NULL) {
             fprintf(stderr, "Failed to allocate FAT entry\n");
@@ -235,24 +229,15 @@ static int process_img (const char *path)
         memcpy(subfile_name + 9, fat->type, 3);
         subfile_name[12] = '\0';
         
-        printf("fat[%u] %s part=%u size=%u blocks0=%u\n",
-               i, subfile_name, fat->part, fat->size, fat->blocks[0]);
-        
         if (memcmp(fat->type, "GMP", 3) == 0) {
             off_t gmp_offset = fmul(fat->blocks[0], block_size);
-            printf("  GMP at 0x%llx\n", (unsigned long long)gmp_offset);
+            if (verbose) printf("  %s GMP at 0x%llx\n", subfile_name, (unsigned long long)gmp_offset);
             process_gmp(fp, gmp_offset);
-            matched = 1;
         }
         else if (memcmp(fat->type, "LBL", 3) == 0) {
             off_t lbl_offset = fmul(fat->blocks[0], block_size);
-            printf("  LBL at 0x%llx\n", (unsigned long long)lbl_offset);
+            if (verbose) printf("  %s LBL at 0x%llx\n", subfile_name, (unsigned long long)lbl_offset);
             process_lbl(fp, lbl_offset);
-            matched = 1;
-        }
-        
-        if (!matched) {
-            printf("  (skipped, not GMP or LBL)\n");
         }
         
         free(fat);
