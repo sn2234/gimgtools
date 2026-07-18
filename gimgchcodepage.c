@@ -76,12 +76,15 @@ static int process_gmp (FILE *fp, off_t gmp_offset)
         free(gmp);
         return 1;
     }
+
+    printf("  GMP hlen=%u type=%.10s locked=%u lbl_off=0x%x tre_off=0x%x rgn_off=0x%x sizeof(GMP)=%zu\n",
+           gmp->comm.hlen, gmp->comm.type, gmp->comm.locked,
+           gmp->lbl_offset, gmp->tre_offset, gmp->rgn_offset,
+           sizeof(struct garmin_gmp));
     
-    if (memcmp(gmp->comm.type, "GMP", 3) != 0) {
-        if (verbose) {
-            printf("  Not a valid GMP header at 0x%llx\n",
-                    (unsigned long long)gmp_offset);
-        }
+    if (memcmp(gmp->comm.type + 7, "GMP", 3) != 0) {
+        fprintf(stderr, "  Invalid GMP subfile header at 0x%llx: '%.10s'\n",
+                (unsigned long long)gmp_offset, gmp->comm.type);
         free(gmp);
         return 0;
     }
