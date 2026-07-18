@@ -22,10 +22,8 @@ set(UTIL_INDEP util_indep.c)
 add_executable(gimginfo gimginfo.c)
 target_link_libraries(gimginfo PRIVATE gimglib)
 
-find_library(MATH_LIB m)
-
 add_executable(gimgfixcmd gimgfixcmd.c cmdlib.c)
-target_link_libraries(gimgfixcmd PRIVATE gimglib ${MATH_LIB})
+target_link_libraries(gimgfixcmd PRIVATE gimglib $<$<NOT:$<C_COMPILER_ID:MSVC>>:m>)
 
 add_executable(gimgxor gimgxor.c)
 
@@ -35,5 +33,5 @@ add_executable(gimgextract gimgextract.c ${UTIL_INDEP})
 add_executable(gimgchcodepage gimgchcodepage.c ${UTIL_INDEP})
 
 add_executable(cmdc cmdc.c)
-target_link_libraries(cmdc PRIVATE ${MATH_LIB})
+target_link_libraries(cmdc PRIVATE $<$<NOT:$<C_COMPILER_ID:MSVC>>:m>)
 
