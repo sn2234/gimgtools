@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include <assert.h>
 
 #if defined(_MSC_VER) && _MSC_VER < 1600
@@ -14,6 +15,11 @@
 
 static int verbose = 0;
 
+static off_t fmul (unsigned int blk, unsigned int bsize)
+{
+    return (off_t)blk * (off_t)bsize;
+}
+
 static void process_lbl (FILE *fp, off_t lbl_offset)
 {
     unsigned int codepage;
@@ -21,25 +27,26 @@ static void process_lbl (FILE *fp, off_t lbl_offset)
     
     codepage = read_2byte_at(fp, codepage_offset);
     if (verbose) {
-        printf("  LBL at 0x%lx, codepage = %d\n", (unsigned long)lbl_offset, codepage);
+        printf("  LBL at 0x%llx, codepage = %d\n", (unsigned long long)lbl_offset, codepage);
     }
     if (codepage == 65001) {
-        // patch to 1252
         unsigned char patch[2];
-        patch[0] = 0x54; // 1252 = 0x04E4, little-endian 0xE4 0x04
+        patch[0] = 0xe4;
         patch[1] = 0x04;
         if (myfseek64(fp, codepage_offset)) {
-            perror(NULL);
+            fprintf(stderr, "  seek failed to 0x%llx: %s\n",
+                    (unsigned long long)codepage_offset, strerror(errno));
             return;
         }
         if (fwrite(patch, 2, 1, fp) != 1) {
-            perror(NULL);
+            fprintf(stderr, "  write failed at 0x%llx: %s\n",
+                    (unsigned long long)codepage_offset, strerror(errno));
             return;
         }
         printf("  Patched codepage from 65001 to 1252\n");
     } else {
         if (verbose) {
-            printf("  Codepage is not 65001, skipping\n");
+            printf("  Codepage is %d, skipping\n", codepage);
         }
     }
 }
@@ -52,32 +59,32 @@ static int process_gmp (FILE *fp, off_t gmp_offset)
         return 1;
     }
     
-    // read GMP header
     if (myfseek64(fp, gmp_offset)) {
-        perror(NULL);
+        fprintf(stderr, "  GMP seek to 0x%llx failed: %s\n",
+                (unsigned long long)gmp_offset, strerror(errno));
         free(gmp);
         return 1;
     }
     if (fread(gmp, sizeof(struct garmin_gmp), 1, fp) != 1) {
-        perror(NULL);
+        fprintf(stderr, "  GMP read at 0x%llx failed: %s\n",
+                (unsigned long long)gmp_offset, strerror(errno));
         free(gmp);
         return 1;
     }
     
-    // check if it's a valid GMP header
     if (memcmp(gmp->comm.type, "GMP", 3) != 0) {
         if (verbose) {
-            printf("  Not a valid GMP header\n");
+            printf("  Not a valid GMP header at 0x%llx\n",
+                    (unsigned long long)gmp_offset);
         }
         free(gmp);
         return 0;
     }
     
-    // process LBL subfile if present
     if (gmp->lbl_offset != 0) {
         off_t lbl_offset = gmp_offset + gmp->lbl_offset;
         if (verbose) {
-            printf("  LBL inside GMP at 0x%lx\n", (unsigned long)lbl_offset);
+            printf("  LBL inside GMP at 0x%llx\n", (unsigned long long)lbl_offset);
         }
         process_lbl(fp, lbl_offset);
     }
@@ -90,8 +97,8 @@ static int process_img (const char *path)
 {
     FILE *fp;
     struct garmin_img *img_header;
-    int block_size, fatstart, fatend;
-    int i;
+    unsigned int block_size, fatstart, fatend;
+    unsigned int i;
     
     fp = fopen(path, "rb+");
     if (fp == NULL) {
@@ -99,7 +106,6 @@ static int process_img (const char *path)
         return 1;
     }
     
-    // read image header
     img_header = (struct garmin_img *)malloc(sizeof(struct garmin_img));
     if (img_header == NULL) {
         fprintf(stderr, "Failed to allocate image header\n");
@@ -108,13 +114,12 @@ static int process_img (const char *path)
     }
     
     if (fread(img_header, sizeof(struct garmin_img), 1, fp) != 1) {
-        perror(NULL);
+        fprintf(stderr, "Failed to read image header: %s\n", strerror(errno));
         free(img_header);
         fclose(fp);
         return 1;
     }
     
-    // check signature
     if (memcmp(img_header->signature, "DSKIMG", 6) != 0) {
         fprintf(stderr, "Not a valid Garmin IMG file\n");
         free(img_header);
@@ -122,7 +127,6 @@ static int process_img (const char *path)
         return 1;
     }
     
-    // check XOR
     if (img_header->xor_byte != 0) {
         fprintf(stderr, "XOR is not 0. Fix it first with gimgxor.\n");
         free(img_header);
@@ -130,11 +134,10 @@ static int process_img (const char *path)
         return 1;
     }
     
-    block_size = 1 << (img_header->blockexp1 + img_header->blockexp2);
+    block_size = 1u << (img_header->blockexp1 + img_header->blockexp2);
     fatstart = img_header->fat_offset == 0 ? 3 : img_header->fat_offset;
     
     if (img_header->data_offset == 0) {
-        // use root dir
         struct garmin_fat *fat = (struct garmin_fat *)malloc(sizeof(struct garmin_fat));
         if (fat == NULL) {
             fprintf(stderr, "Failed to allocate FAT entry\n");
@@ -142,15 +145,16 @@ static int process_img (const char *path)
             fclose(fp);
             return 1;
         }
-        if (myfseek64(fp, fatstart * 512)) {
-            perror(NULL);
+        if (myfseek64(fp, (off_t)fatstart * 512)) {
+            fprintf(stderr, "rootdir seek to 0x%llx failed: %s\n",
+                    (unsigned long long)fatstart * 512, strerror(errno));
             free(fat);
             free(img_header);
             fclose(fp);
             return 1;
         }
         if (fread(fat, sizeof(struct garmin_fat), 1, fp) != 1) {
-            perror(NULL);
+            fprintf(stderr, "rootdir read failed: %s\n", strerror(errno));
             free(fat);
             free(img_header);
             fclose(fp);
@@ -160,13 +164,15 @@ static int process_img (const char *path)
             memcmp(fat->name, "        ", 8) != 0 ||
             memcmp(fat->type, "   ", 3) != 0) {
             fprintf(stderr, "imgheader.data_offset = 0 but the first file is not root dir!\n");
+            fprintf(stderr, "  flag=%02x name='%.8s' type='%.3s'\n",
+                    fat->flag, fat->name, fat->type);
             free(fat);
             free(img_header);
             fclose(fp);
             return 1;
         }
         fatstart++;
-        if (fat->size % 512 != 0 || fat->size <= fatstart * 512) {
+        if (fat->size % 512 != 0 || fat->size <= (unsigned)fatstart * 512) {
             fprintf(stderr, "rootdir.size = %x which is bad\n", fat->size);
             free(fat);
             free(img_header);
@@ -174,22 +180,20 @@ static int process_img (const char *path)
             return 1;
         }
         fatend = fat->size / 512;
-        if (verbose) {
-            printf("Parsing fat use rootdir, fatstart=%d, fatend=%d\n", fatstart, fatend);
-        }
+        printf("block_size=%u, fatstart=%u, fatend=%u (rootdir size=%u)\n",
+               block_size, fatstart, fatend, fat->size);
         free(fat);
     } else {
         fatend = img_header->data_offset / 512;
-        if (verbose) {
-            printf("Parsing fat use data_offset, fatstart=%d, fatend=%d\n", fatstart, fatend);
-        }
+        printf("block_size=%u, fatstart=%u, fatend=%u (data_offset=%u)\n",
+               block_size, fatstart, fatend, img_header->data_offset);
     }
     
-    // iterate over FAT entries
     for (i = fatstart; i < fatend; i++) {
         struct garmin_fat *fat = (struct garmin_fat *)malloc(sizeof(struct garmin_fat));
-        off_t offset = i * 512;
+        off_t offset = (off_t)i * 512;
         char subfile_name[16];
+        int matched = 0;
         
         if (fat == NULL) {
             fprintf(stderr, "Failed to allocate FAT entry\n");
@@ -197,12 +201,14 @@ static int process_img (const char *path)
         }
         
         if (myfseek64(fp, offset)) {
-            perror(NULL);
+            fprintf(stderr, "fat[%u] seek to 0x%llx failed: %s\n",
+                    i, (unsigned long long)offset, strerror(errno));
             free(fat);
             continue;
         }
         if (fread(fat, sizeof(struct garmin_fat), 1, fp) != 1) {
-            perror(NULL);
+            fprintf(stderr, "fat[%u] read at 0x%llx failed: %s\n",
+                    i, (unsigned long long)offset, strerror(errno));
             free(fat);
             continue;
         }
@@ -216,34 +222,30 @@ static int process_img (const char *path)
             continue;
         }
         
-        // construct subfile name
         memcpy(subfile_name, fat->name, 8);
         subfile_name[8] = '.';
         memcpy(subfile_name + 9, fat->type, 3);
         subfile_name[12] = '\0';
         
-        if (verbose) {
-            printf("Processing FAT entry %d: %s\n", i, subfile_name);
+        printf("fat[%u] %s part=%u size=%u blocks0=%u\n",
+               i, subfile_name, fat->part, fat->size, fat->blocks[0]);
+        
+        if (memcmp(fat->type, "GMP", 3) == 0) {
+            off_t gmp_offset = fmul(fat->blocks[0], block_size);
+            printf("  GMP at 0x%llx\n", (unsigned long long)gmp_offset);
+            process_gmp(fp, gmp_offset);
+            matched = 1;
+        }
+        else if (memcmp(fat->type, "LBL", 3) == 0) {
+            off_t lbl_offset = fmul(fat->blocks[0], block_size);
+            printf("  LBL at 0x%llx\n", (unsigned long long)lbl_offset);
+            process_lbl(fp, lbl_offset);
+            matched = 1;
         }
         
-        // check if it's a GMP file
-        if (memcmp(fat->type, "GMP", 3) == 0) {
-            off_t gmp_offset = fat->blocks[0] * block_size;
-            if (verbose) {
-                printf("  GMP at 0x%lx\n", (unsigned long)gmp_offset);
-            }
-            process_gmp(fp, gmp_offset);
+        if (!matched) {
+            printf("  (skipped, not GMP or LBL)\n");
         }
-        // check if it's a standalone LBL file
-        else if (memcmp(fat->type, "LBL", 3) == 0) {
-            off_t lbl_offset = fat->blocks[0] * block_size;
-            if (verbose) {
-                printf("  Standalone LBL at 0x%lx\n", (unsigned long)lbl_offset);
-            }
-            process_lbl(fp, lbl_offset);
-        }
-        // for other types, we could optionally check inside GMP if present
-        // but we already handled GMP above
         
         free(fat);
     }
