@@ -2,3 +2,11 @@
 *.o
 *.obj
 *.exe
+gimginfo
+gimgfixcmd
+gimgxor
+gimgunlock
+gimgch
+gimgextract
+gimgchcodepage
+cmdc

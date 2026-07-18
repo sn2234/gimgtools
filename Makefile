@@ -3,7 +3,7 @@ CFLAGS = -Wall -D_FILE_OFFSET_BITS=64
 GIMGLIB_SOURCES = gimglib.c util.c sf_typ.c sf_mps.c sf_tre.c sf_rgn.c sf_lbl.c sf_net.c sf_nod.c sf_dem.c sf_mar.c sf_gmp.c
 GIMGLIB_OBJS = $(GIMGLIB_SOURCES:.c=.o)
 
-all: gimginfo gimgfixcmd gimgxor gimgunlock gimgch gimgextract cmdc
+all: gimginfo gimgfixcmd gimgxor gimgunlock gimgch gimgextract gimgchcodepage cmdc
 
 gimginfo: gimginfo.o $(GIMGLIB_OBJS)
 
@@ -18,9 +18,11 @@ gimgch: gimgch.o util_indep.o
 
 gimgextract: gimgextract.o util_indep.o
 
+gimgchcodepage: gimgchcodepage.o util_indep.o
+
 cmdc: cmdc.o
 	$(CC) -o $@ $< -lm
 
 .PHONY: clean
 clean:
-	rm -f gimginfo gimgfixcmd gimgxor gimgunlock gimgch gimgextract cmdc *.o
+	rm -f gimginfo gimgfixcmd gimgxor gimgunlock gimgch gimgextract gimgchcodepage cmdc *.o
