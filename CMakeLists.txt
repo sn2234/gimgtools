@@ -3,6 +3,10 @@ project(gimgtools C)
 
 set(CMAKE_C_STANDARD 99)
 
+if(MSVC)
+    add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+endif()
+
 # --- gimglib (static library) ---
 add_library(gimglib STATIC
     gimglib.c util.c sf_typ.c sf_mps.c sf_tre.c sf_rgn.c sf_lbl.c

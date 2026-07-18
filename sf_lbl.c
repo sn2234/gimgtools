@@ -4,6 +4,8 @@
 #include <iconv.h>
 #else
 #include <windows.h>
+#include <BaseTsd.h>
+typedef SSIZE_T ssize_t;
 #endif
 
 // 6-bit decoder cpoied from http://libgarmin.sourceforge.net/
