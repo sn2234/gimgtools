@@ -14,6 +14,9 @@
 #include "garmin_struct.h"
 
 static int verbose = 0;
+static int patch_count = 0;
+static int skip_65001 = 0;
+static int skip_other = 0;
 
 static off_t fmul (unsigned int blk, unsigned int bsize)
 {
@@ -26,9 +29,7 @@ static void process_lbl (FILE *fp, off_t lbl_offset)
     off_t codepage_offset = lbl_offset + 0x0aa;
     
     codepage = read_2byte_at(fp, codepage_offset);
-    if (verbose) {
-        printf("  LBL at 0x%llx, codepage = %d\n", (unsigned long long)lbl_offset, codepage);
-    }
+    printf("  LBL at 0x%llx, codepage = %d\n", (unsigned long long)lbl_offset, codepage);
     if (codepage == 65001) {
         unsigned char patch[2];
         patch[0] = 0xe4;
@@ -43,11 +44,15 @@ static void process_lbl (FILE *fp, off_t lbl_offset)
                     (unsigned long long)codepage_offset, strerror(errno));
             return;
         }
-        printf("  Patched codepage from 65001 to 1252\n");
+        printf("  => patched to 1252\n");
+        patch_count++;
+    } else if (codepage == 1252) {
+        if (verbose)
+            printf("  already 1252, skipping\n");
+        skip_65001++;
     } else {
-        if (verbose) {
-            printf("  Codepage is %d, skipping\n", codepage);
-        }
+        printf("  codepage is %d, skipping\n", codepage);
+        skip_other++;
     }
 }
 
@@ -252,6 +257,9 @@ static int process_img (const char *path)
     
     free(img_header);
     fclose(fp);
+
+    printf("Done: %d patched, %d unchanged (1252), %d skipped (other codepage)\n",
+           patch_count, skip_65001, skip_other);
     return 0;
 }
 
