@@ -9,6 +9,11 @@ gimgtools is a set of command-line tools to examine and manipulate Garmin IMG
 * gimgxor: Some maps have been scrambled by a trival XOR algorithm. They do
     not work with other gimg* tools. You can use gimgxor to unscramble them.
   Usage: gimgxor map.img
+* gimgchcodepage: Change the codepage in LBL subfiles from 65001 (UTF-8) to
+    1252 (Latin-1). This is needed for some Garmin devices (e.g. GPSMAP 64)
+    that reject maps with Unicode encoding.
+  Usage: gimgchcodepage [-v] map.img
+  Options: -v  verbose output
 === The following tools are for reverse engineering only ===
 * gimginfo: Print information of the map.
   Usage: gimginfo map.img
